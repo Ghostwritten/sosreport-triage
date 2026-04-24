@@ -1,13 +1,11 @@
 ---
 name: Sosreport Triage
-description: Analyze resource pressure from an extracted sosreport using minimal, file-backed evidence across memory, CPU, disk, and process state, then report concise findings with uncertainty.
+description: Analyze an extracted sosreport for memory, CPU, disk, and process pressure using concise, file-backed evidence and cautious attribution.
 ---
 
 # Sosreport Triage
 
-Use this skill for offline analysis of a customer-provided, already extracted `sosreport`.
-
-Goal: decide whether host resource pressure likely contributed to an incident, using concise, path-cited evidence.
+Use this skill to judge whether host resource pressure likely contributed to an incident in an extracted `sosreport`.
 
 ## Use When
 
@@ -25,8 +23,9 @@ Goal: decide whether host resource pressure likely contributed to an incident, u
 
 - Treat `sosreport` as a snapshot unless logs prove a timeline.
 - Missing files are normal; use fallbacks and lower confidence.
+- If the preferred path is missing, use the next available path and note the gap.
 - Do not infer root cause from one threshold alone.
-- Keep the answer short; cite file paths for nontrivial findings.
+- Keep the answer short and cite file paths for nontrivial findings.
 
 ## Minimal Evidence Paths
 
@@ -40,19 +39,19 @@ Check the first available path in each group.
 
 If a whole evidence group is unavailable, state that in `Evidence gaps`.
 
-## Analysis Order
+## Analysis Flow
 
-1. Snapshot quality
-   Check which evidence groups are present and narrow confidence early if key groups are missing.
-2. Memory
-   Prefer `MemAvailable`; check swap use, OOM/allocation failures, and outsized RSS consumers.
-3. CPU/load
-   Establish CPU count before interpreting load; high load plus many `D` tasks suggests I/O wait, not CPU saturation.
-4. Disk
-   Check real filesystems, not pseudo filesystems by default; look for near-full filesystems, write failures, read-only remounts, and I/O errors.
-5. Process state
-   Look for top CPU or memory consumers, `D` accumulation, abnormal counts, and only treat `Z` as meaningful when repeated or numerous.
-6. Correlation
+1. Check coverage
+   Confirm which evidence groups exist and reduce confidence early if key groups are missing.
+2. Check memory
+   Prefer `MemAvailable`; review swap, OOM/allocation failures, and outsized RSS consumers.
+3. Check CPU/load
+   Establish CPU count before interpreting load; high load with many `D` tasks suggests I/O wait, not CPU saturation.
+4. Check disk
+   Focus on real filesystems; look for near-full filesystems, write failures, read-only remounts, and I/O errors.
+5. Check processes
+   Look for top CPU or memory consumers, `D` accumulation, and only treat `Z` as meaningful when repeated or numerous.
+6. Correlate
    Only connect resource pressure to failure when logs or clear service symptoms support it.
 
 ## Interpretation Shortcuts
@@ -61,6 +60,17 @@ If a whole evidence group is unavailable, state that in `Evidence gaps`.
 - load above CPU count + low CPU consumption + many `D` tasks => storage-wait suspicion
 - filesystem near full + `No space left` or write failure => strong disk-impact evidence
 - swap use alone, high cache alone, or 1-minute load alone => not enough
+
+## Severity And Confidence
+
+- `Critical`: active exhaustion or strong failure-linked resource evidence
+- `Warning`: clear pressure or risk, but causality or impact is incomplete
+- `OK`: no meaningful resource pressure in available evidence
+- `Unknown`: evidence is too incomplete or conflicting to judge safely
+
+- `High` confidence: multiple files corroborate the same conclusion
+- `Medium` confidence: the leading explanation is plausible, but a major gap remains
+- `Low` confidence: weak or conflicting evidence; report risk, not root cause
 
 ## Output Format
 
@@ -78,14 +88,6 @@ Keep facts and inference separate. If correlation is weak, say `risk signal` rat
 - Do not invent values.
 - Do not assume a standard `sosreport` layout.
 - Do not claim trend or start time without timestamped log support.
+- Do not turn weak signals into severity on their own.
 - Do not call root cause without at least one corroborating failure signal.
 - If evidence conflicts, say so explicitly.
-
-## Companion Assets
-
-Load only when needed:
-
-- `docs/rubric.md`: severity and confidence calibration
-- `docs/compatibility.md`: distro/path fallbacks
-- `cases/`: replayable examples
-- `scripts/sos-summary.sh`: local first-pass summary helper
